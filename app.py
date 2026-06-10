@@ -1,7 +1,12 @@
 import os
+import random
+import requests
+import urllib.parse
 from flask import Flask, request, jsonify
+from bs4 import BeautifulSoup
 from openai import OpenAI
 from dotenv import load_dotenv
+
 
 # .env 파일에서 환경변수 로드
 load_dotenv()
@@ -43,6 +48,42 @@ def get_user_input(data):
 @app.route("/", methods=["GET"])
 def home():
     return "Study Helper Chatbot Server is running."
+
+@app.route("/google-news", methods=["POST"])
+def google_news():
+    data = request.get_json(silent=True) or {}
+    y = data.get("action", {}).get("params", {}).get("파라미터", "").strip()
+
+    if not y:
+        return jsonify(kakao_text("파라미터 값이 없습니다."))
+
+    # RSS 피드 주소 사용 (가장 안정적)
+    query = urllib.parse.quote(y)
+    url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        # XML 구조를 파싱합니다.
+        soup = BeautifulSoup(r.text, "xml")
+        items = soup.find_all("item")
+
+        titles = []
+        for item in items[:5]: # 상위 5개 추출
+            title = item.title.text
+            if title:
+                titles.append(title)
+
+        if titles:
+            result = f"['{y}'] 뉴스 검색 결과:\n\n" + "\n\n".join([f"{i+1}. {t}" for i, t in enumerate(titles)])
+        else:
+            result = f"['{y}']에 대한 검색 결과를 찾지 못했습니다."
+
+    except Exception as e:
+        result = f"뉴스 조회 중 오류 발생: {str(e)}"
+
+    return jsonify(kakao_text(result))
+
 
 # 1. 공부돕기 기능 (개념 설명 및 학습 보조)
 @app.route("/study-help", methods=["POST"])
